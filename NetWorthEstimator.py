@@ -1,6 +1,7 @@
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
+import numpy as np
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.model_selection import train_test_split
 from sklearn.linear_model import LinearRegression, Ridge, Lasso, ElasticNet
@@ -14,6 +15,7 @@ from sklearn.metrics import r2_score, mean_absolute_error
 import joblib 
 import tkinter as tk 
 from tkinter import messagebox
+import unittest
 
 # -------------------------------
 # Load and prepare the data
@@ -24,7 +26,6 @@ data = pd.read_excel(file_path)
 
 input_df = data.drop(['Client Name', 'Client e-mail', 'Profession', 'Education', 'Country', 'Net Worth'], axis=1)
 output_df = data['Net Worth']
-
 
 # ---------------------------------
 # S.R 1.4
@@ -71,13 +72,13 @@ X_scaled = scaler.fit_transform(input_df_encoded)
 # Save feature names for later use
 feature_names = input_df_encoded.columns
 
-
 # Train-test split
 X_train, X_test, y_train, y_test = train_test_split(
     X_scaled, output_df, test_size=0.2, random_state=42
 )
 
 joblib.dump(feature_names, 'feature_names.pkl')
+
 # ---------------------------------
 # Initialize 10 Models
 # ---------------------------------
@@ -160,14 +161,14 @@ sample_input = {col: 0 for col in input_df_encoded.columns}  # default zeros
 # Update sample_input with example realistic values
 sample_input['Age'] = 40
 sample_input['Income'] = 85000
-sample_input['Credit_Card_Debt'] = 5000
-sample_input['Healthcare_Cost'] = 2000
-sample_input['Inherited_Amount'] = 10000
+sample_input['Credit Card Debt'] = 5000
+sample_input['Healthcare Cost'] = 2000
+sample_input['Inherited Amount'] = 10000
 sample_input['Stocks'] = 15000
 sample_input['Bonds'] = 8000
-sample_input['Mutual_Funds'] = 12000
-sample_input['ETFs_Exchange_Traded_Funds'] = 7000
-sample_input['REITs_Real_Estate_Investment_Trusts'] = 3000
+sample_input['Mutual Funds'] = 12000
+sample_input['ETFs'] = 7000
+sample_input['REITs'] = 3000
 
 # Convert to DataFrame and scale
 sample_df = pd.DataFrame([[sample_input.get(col, 0) for col in feature_names]], columns=feature_names)
@@ -222,3 +223,91 @@ predict_btn.grid(row=len(feature_names), columnspan=2, pady=15)
 
 # Start the GUI loop
 window.mainloop()
+
+# ---------------------------------
+# S.R 2.1 - 2.3
+# Unit tests for privacy principles
+# ---------------------------------
+
+# -----------------------------------
+# S.R 2.1   
+# Unit tests for input privacy principles
+# -----------------------------------
+class TestPrivacyPrinciples(unittest.TestCase):
+    
+    def setUp(self):
+        file_path = r'C:\Users\nicho\Downloads\Net_Worth_Data.xlsx'
+        self.data = pd.read_excel(file_path)
+
+    def test_input_data_is_anonymized(self):
+        pii_columns = ['Client Name', 'Client e-mail', 'Profession', 'Education', 'Country', 'Net Worth']
+        for col in pii_columns:
+            self.assertIn(col, self.data.columns, f"Expected PII column '{col}' missing from raw data.")
+        processed_input_df = self.data.drop(pii_columns, axis=1)
+        for col in pii_columns:
+            self.assertNotIn(col, processed_input_df.columns,
+                             f"Privacy violation: '{col}' should not be in the input dataframe!")
+
+# ---------------------------------
+# S.R 2.2
+# Unit tests for output privacy principles
+# ---------------------------------
+class TestOutputPrivacyPrinciples(unittest.TestCase):
+
+    def setUp(self):
+        self.file_path = r'C:\Users\nicho\Downloads\Net_Worth_Data.xlsx'
+        self.data = pd.read_excel(self.file_path)
+        input_df = self.data.drop(['Client Name', 'Client e-mail', 'Profession', 'Education', 'Country', 'Net Worth'], axis=1)
+        input_df_encoded = pd.get_dummies(input_df, drop_first=True)
+        input_df_encoded.fillna(input_df_encoded.mean(), inplace=True)
+        self.scaler = joblib.load('input_scaler.joblib')
+        self.model = joblib.load('best_net_worth_model.joblib')
+        self.feature_names = joblib.load('feature_names.pkl')
+        self.sample = pd.DataFrame([[0 for _ in self.feature_names]], columns=self.feature_names)
+        self.sample_scaled = self.scaler.transform(self.sample)
+
+    def test_output_is_anonymized(self):
+        prediction = self.model.predict(self.sample_scaled)
+        self.assertTrue(isinstance(prediction, (np.ndarray, list, float)), "Output should be numeric, not structured with personal info.")
+        output_str = str(prediction)
+        pii_indicators = ['@', 'Client Name', 'e-mail']
+        for pii in pii_indicators:
+            self.assertNotIn(pii, output_str, f"Privacy breach: Output includes personal data like '{pii}'.")
+
+# ---------------------------------
+# S.R 2.3
+# Unit tests for data shape privacy principles
+# ---------------------------------
+class TestDatasetShapePrivacy(unittest.TestCase):
+    
+    def setUp(self):
+        self.file_path = r'C:\Users\nicho\Downloads\Net_Worth_Data.xlsx'
+        self.data = pd.read_excel(self.file_path)
+        self.data = self.data.drop(['Client Name', 'Client e-mail', 'Profession', 'Education', 'Country'], axis=1)
+        self.expected_columns = {
+            'Age', 'Income', 'Credit Card Debt', 'Healthcare Cost', 'Inherited Amount',
+            'Stocks', 'Bonds', 'Mutual Funds', 'ETFs', 'REITs'
+        }
+        self.sensitive_columns = {
+            'Client Name', 'Client e-mail', 'Profession', 'Education', 'Country'
+        }
+
+    def test_expected_columns_present(self):
+        current_columns = set(self.data.columns)
+        for col in self.expected_columns:
+            self.assertIn(col, current_columns, f"Missing expected column: {col}")
+
+    def test_no_sensitive_columns_present(self):
+        current_columns = set(self.data.columns)
+        for sensitive_col in self.sensitive_columns:
+            self.assertNotIn(sensitive_col, current_columns, f"Privacy breach: Found sensitive column '{sensitive_col}'")
+
+    def test_column_count(self):
+        self.assertEqual(
+            len(self.expected_columns),
+            len(self.data[list(self.expected_columns)].columns),
+            "Unexpected number of columns. Dataset may contain extra or missing columns."
+        )
+
+if __name__ == "__main__":
+    unittest.main()
